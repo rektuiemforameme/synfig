@@ -32,6 +32,8 @@
 
 #include <synfigapp/action.h>
 #include <synfig/valuenodes/valuenode_dynamiclist.h>
+#include <synfig/valuenodes/valuenode_bone.h>
+#include <synfig/valuenodes/valuenode_composite.h>
 
 /* === M A C R O S ========================================================= */
 
@@ -47,9 +49,7 @@ class ValueDescBoneDuplicate :
 	public CanvasSpecific
 {
 private:
-	// ValueNodes is a map of value nodes parents and the indexes to remove
-	typedef std::map<synfig::ValueNode_DynamicList::Handle, std::vector<int> > ValueNodes;
-	ValueNodes value_nodes;
+	std::list<ValueDesc> selected_bone_descs;
 	synfig::Time time;
 
 public:
@@ -62,9 +62,11 @@ public:
 	virtual bool set_param(const synfig::String& name, const Param &);
 	virtual bool is_ready()const;
 
-	virtual void prepare();
 	virtual void perform();
 	virtual void undo();
+	bool list_contains(ValueDesc vd);
+	bool list_contains_value_node(synfig::ValueNode_Bone::Handle vn);
+	void set_active_bone(synfig::ValueNode::Handle bone_value_node);
 
 	ACTION_MODULE_EXT
 };

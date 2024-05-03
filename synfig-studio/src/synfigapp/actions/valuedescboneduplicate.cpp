@@ -34,10 +34,15 @@
 
 #include "valuedescboneduplicate.h"
 
+#include <synfig/layers/layer_skeleton.h>
+#include <synfig/layers/layer_skeletondeformation.h>
 #include <synfig/valuenodes/valuenode_bone.h>
 #include <synfig/valuenodes/valuenode_composite.h>
+#include <synfig/valuenodes/valuenode_staticlist.h>
 #include <synfigapp/canvasinterface.h>
 #include <synfigapp/localization.h>
+#include <iostream>
+//#include <QDebug>
 
 #endif
 
@@ -88,7 +93,6 @@ bool
 Action::ValueDescBoneDuplicate::is_candidate(const ParamList &x)
 {
 	ParamList::const_iterator i;
-
 	i = x.find("value_desc");
 	if (i == x.end()) return false;
 
@@ -109,63 +113,11 @@ Action::ValueDescBoneDuplicate::is_candidate(const ParamList &x)
 bool
 Action::ValueDescBoneDuplicate::set_param(const synfig::String& name, const Action::Param &param)
 {
-	ValueNode_DynamicList::Handle value_node;
-	if(name=="value_desc" && param.get_type()==Param::TYPE_VALUEDESC)
+	if ((name == "value_desc" || name == "selected_value_desc") && param.get_type() == Param::TYPE_VALUEDESC
+	 && param.get_value_desc().parent_is_value_node()
+	 && ValueNode_Bone::Handle::cast_dynamic(param.get_value_desc().get_parent_desc().get_value_node()) )
 	{
-		ValueDesc value_desc(param.get_value_desc());
-		if(!value_desc.parent_is_value_node())
-			return false;
-		value_node=ValueNode_DynamicList::Handle::cast_dynamic(value_desc.get_parent_value_node());
-		if(!value_node)
-		{
-			ValueNode::Handle compo(ValueNode_Composite::Handle::cast_dynamic(value_desc.get_parent_value_node()));
-			if(compo)
-			{
-				ValueNode_DynamicList::Handle parent_list=NULL;
-				std::set<Node*>::iterator iter;
-				// now check if the composite's parent is a dynamic list type
-				for(iter=compo->parent_set.begin();iter!=compo->parent_set.end();++iter)
-					{
-						parent_list=ValueNode_DynamicList::Handle::cast_dynamic(*iter);
-						if(parent_list)
-						{
-							value_node=parent_list;
-							// Now we need to find the index of this composite item
-							// on the dynamic list
-							int i;
-							for(i=0;i<value_node->link_count();i++)
-								if(compo->get_guid()==value_node->get_link(i)->get_guid())
-									break;
-							if(i<value_node->link_count())
-								value_desc=synfigapp::ValueDesc(value_node, i);
-							else
-								return false;
-							break;
-						}
-					}
-				if(!value_node)
-					return false;
-			}
-			else
-				return false;
-			if(!value_node)
-				return false;
-		}
-		ValueNodes::iterator it;
-		// Try to find the current parent value node in our map
-		it=value_nodes.find(value_node);
-		if(it==value_nodes.end())
-		{
-			// Not found, then create a new one
-			value_nodes[value_node].push_back(value_desc.get_index());
-		}
-		else
-		{
-			// found, then insert the index of the value desc.
-			// Maybe the index is already inserted.
-			// Later is ignored if that happen
-			it->second.push_back(value_desc.get_index());
-		}
+		selected_bone_descs.push_back(param.get_value_desc().get_parent_desc());
 		return true;
 	}
 	if(name=="time" && param.get_type()==Param::TYPE_TIME)
@@ -179,151 +131,137 @@ Action::ValueDescBoneDuplicate::set_param(const synfig::String& name, const Acti
 bool
 Action::ValueDescBoneDuplicate::is_ready()const
 {
-	if (!value_nodes.size())
+	if (!selected_bone_descs.size())
 		return false;
 	return Action::CanvasSpecific::is_ready();
-}
-
-void
-Action::ValueDescBoneDuplicate::prepare()
-{
-	ValueNodes::iterator it;
-	std::map<ValueDesc,ValueDesc> duplicate_bones;
-//	Sort bones from base of trees to leaves
-//	Foreach
-//		Duplicate Bone
-//		Add Bone to map with original and duplicate
-//		Find parent in map and reparent
-	int prev_index=-1;
-	std::list<int>::iterator i;
-	std::list<int> l(it->second.begin(), it->second.end());
-	synfig::ValueNode_DynamicList::Handle value_node(it->first);
-	while(value_nodes.size() > 0)
-	{
-		for(i=l.begin();i!=l.end();++i)
-		{
-			int index(*i);
-			// This prevents duplicated index
-			if(index==prev_index)
-				continue;
-			prev_index=index;
-			ValueDesc bone_value_desc = ValueDesc(value_node,index);
-			if(value_nodes.count(bone_value_desc.get_parent_desc().get_value_node()) == 0)	//If the bone's parent isn't in the list, it's ready to be duplicated
-			{
-				Bone bone = Bone();
-				Bone parent_bone;
-				if(duplicate_bones.count(parent_bone) == 0){
-					parent_bone = ValueNode_Bone::Handle::cast_dynamic(bone_value_desc.get_parent_desc().get_value_node()).;
-				}else{
-
-				}
-				bone.set_origin(bone_value_desc. .get(Point()));
-				bone.set_scalelx(scalelx.get(Real()));
-				bone.set_width(width.get(Real()));
-				bone.set_tipwidth(tipwidth.get(Real()));
-				bone.set_angle(angle.get(Angle()));
-
-				ValueNode_Bone::Handle bone_node = ValueNode_Bone::create(bone,get_canvas());
-
-			}
-
-//				Bone bone = Bone();
-//				if(c_parent){
-//					bone.set_parent(ValueNode_Bone_Root::create(Bone()));
-//				}else{
-//					bone.set_parent(ValueNode_Bone::Handle::cast_dynamic(ValueNode::Handle(value_node->list[index])).get());
-//				}
-//				bone.set_origin(origin.get(Point()));
-//				bone.set_scalelx(scalelx.get(Real()));
-//				bone.set_width(width.get(Real()));
-//				bone.set_tipwidth(tipwidth.get(Real()));
-//				bone.set_angle(angle.get(Angle()));
-
-//				ValueNode_Bone::Handle bone_node = ValueNode_Bone::create(bone,get_canvas());
-		}
-	}
-	for(it=value_nodes.begin();it!=value_nodes.end();++it)
-	{
-		synfig::ValueNode_DynamicList::Handle value_node(it->first);
-		std::list<int> l(it->second.begin(), it->second.end());
-		std::list<int>::iterator i;
-		// sort the indexes to perform the actions from higher to lower index
-		l.sort();
-		int prev_index=-1;
-		for(i=l.begin();i!=l.end();++i)
-		{
-			int index(*i);
-			// This prevents duplicated index
-			if(index==prev_index)
-				continue;
-			prev_index=index;
-			ValueDesc value_desc = ValueDesc(value_node,index);
-//			Action::Handle action;
-//			// If we are in animate editing mode
-//			if(get_edit_mode()&MODE_ANIMATE)
-//				action=Action::create("ActivepointSetOff");
-//			else
-//				action=Action::create("ValueNodeDynamicListRemove");
-//			if(!action)
-//				throw Error(_("Unable to find action (bug)"));
-//			action->set_param("canvas",get_canvas());
-//			action->set_param("canvas_interface",get_canvas_interface());
-//			action->set_param("time",time);
-//			action->set_param("origin",origin);
-//			action->set_param("value_desc",ValueDesc(value_node,index));
-//			if(!action->is_ready())
-//				throw Error(Error::TYPE_NOTREADY);
-//			add_action_front(action);
-		}
-	}
 }
 
 
 void
 Action::ValueDescBoneDuplicate::perform()
 {
-//	if (!value_desc.parent_is_value_node()
-//	 || !value_desc.is_parent_desc_declared()
-//	 || !value_desc.get_parent_desc().is_value_node()
-//	 || !child)
-//			throw Error(Error::TYPE_NOTREADY);
+	//Map of bones that have been duplicated, with the original bone it was duped from as the key
+	std::map<ValueNode_Bone::Handle,ValueNode_Bone::Handle> duplicate_bones;
+	Layer::Handle layer = get_canvas_interface()->get_selection_manager()->get_selected_layer();
+	Layer_Skeleton::Handle skel_layer = Layer_Skeleton::Handle::cast_dynamic(layer);
+	Layer_SkeletonDeformation::Handle deform_layer = Layer_SkeletonDeformation::Handle::cast_dynamic(layer);
+	ValueDesc list_desc(layer,"bones");
+	// create a child bone
+	ValueNode_StaticList::Handle list_node;
+	list_node=ValueNode_StaticList::Handle::cast_dynamic(list_desc.get_value_node());
 
-//	ValueNode_Bone::Handle child_bone;
-//	if((child_bone = ValueNode_Bone::Handle::cast_dynamic(child))){
-//		if(ValueNode_Bone::Handle::cast_dynamic(value_desc.get_parent_value_node())){
-//			ValueDesc new_parent_bone_desc = value_desc.get_parent_desc();
 
-//			if(child_bone->set_link("parent",ValueNode_Const::create(ValueNode_Bone::Handle::cast_dynamic(new_parent_bone_desc.get_value_node())))){
-//				Matrix new_parent_matrix = new_parent_bone_desc.get_value(time).get(Bone()).get_animated_matrix();
-//				Angle new_parent_angle = Angle::rad(atan2(new_parent_matrix.axis(0)[1],new_parent_matrix.axis(0)[0]));
-//				Real new_parent_scale = new_parent_bone_desc.get_value(time).get(Bone()).get_scalelx();
-//				new_parent_matrix = new_parent_matrix.get_inverted();
+//	Sort bones from base of trees to leaves
+//	Foreach
+//		Duplicate Bone
+//		Add Bone to map with original and duplicate
+//		Find parent in map and reparent
+	while(selected_bone_descs.size() > duplicate_bones.size())
+	{
+		for(auto it = selected_bone_descs.begin(); it!=selected_bone_descs.end(); ++it)
+		{
+			ValueDesc& current_bone_desc(*it);
+			ValueNode_Bone::Handle current_bone_vn = ValueNode_Bone::Handle::cast_dynamic(current_bone_desc.get_value_node());
+//			std::cout << (current_bone_desc.is_value_node()) << std::endl;
+			if(current_bone_desc.is_value_node() && duplicate_bones.count(current_bone_vn) == 0)
+			{
+				ValueNode_Bone::Handle current_parent_bone_vn = ValueNode_Bone::Handle::cast_dynamic(current_bone_vn->get_link("parent")->operator()(time).get(ValueNode_Bone::Handle()));
+				//ValueDesc current_parent_bone_desc = current_bone_desc.get_parent_desc();
+				if(!list_contains_value_node(current_parent_bone_vn) || duplicate_bones.count(current_parent_bone_vn))	//If the bone's parent isn't in the list, it's ready to be duplicated
+				{
 
-//				ValueNode_Bone::Handle old_parent_bone = ValueNode_Const::Handle::cast_dynamic(prev_parent)->get_value().get(ValueNode_Bone::Handle());
-//				Matrix old_parent_matrix = old_parent_bone->operator()(time).get(Bone()).get_animated_matrix();
-//				Angle old_parent_angle = Angle::rad(atan2(old_parent_matrix.axis(0)[1],old_parent_matrix.axis(0)[0]));
-//				Real old_parent_scale = old_parent_bone->get_link("scalelx")->operator()(time).get(Real());
+////					ValueNode_Bone::Handle current_parent_bone_vn = ValueNode_Bone::Handle::cast_dynamic(current_parent_bone_desc.get_value_node());
+//					Bone new_bone = Bone();
+//					ValueNode_Bone::Handle new_parent_bone_vn;
+//					if(duplicate_bones.count(current_parent_bone_vn) == 0){	//If the parent isn't in the dup map, then the parent should be the same as the duplicated bone's
+//						new_parent_bone_vn = current_parent_bone_vn;
+//					}else{													//If the parent is in the dup map, use its duplicaated counterpart
+//						new_parent_bone_vn = duplicate_bones[current_parent_bone_vn];
+//					}
+//					Point new_bone_origin = current_bone_vn->get_link("origin")->operator()(time).get(Point());	//Flip the bone's pos across the y axis
+//					new_bone_origin.multiply_coords(Point(-1,1));
+//					new_bone.set_origin(new_bone_origin);
+//					new_bone.set_scalelx(current_bone_vn->get_link("scalelx")->operator()(time).get(Real()));
+//					new_bone.set_scalex(current_bone_vn->get_link("scalex")->operator()(time).get(Real()));
+//					new_bone.set_width(current_bone_vn->get_link("width")->operator()(time).get(Real()));
+//					new_bone.set_length(current_bone_vn->get_link("length")->operator()(time).get(Real()));
+//					new_bone.set_tipwidth(current_bone_vn->get_link("tipwidth")->operator()(time).get(Real()));
+//					new_bone.set_angle(current_bone_vn->get_link("angle")->operator()(time).get(Angle()));
+//					new_bone.set_parent(new_parent_bone_vn.get());
 
-//				Point origin = child_bone->get_link("origin")->operator()(time).get(Point());
-//				Angle angle = child_bone->get_link("angle")->operator()(time).get(Angle());
+//					ValueNode_Bone::Handle new_bone_node = ValueNode_Bone::create(new_bone,get_canvas());
+//					new_bone_node->set_link("parent",ValueNode_Const::create(new_parent_bone_vn));
 
-//				angle+=old_parent_angle;
-//				origin[0] *= old_parent_scale;
-//				origin = old_parent_matrix.get_transformed(origin);
-//				origin = new_parent_matrix.get_transformed(origin);
-//				origin[0]/= new_parent_scale;
-//				angle-=new_parent_angle;
-//				child_bone->set_link("origin",ValueNode_Const::create(origin));
-//				child_bone->set_link("angle",ValueNode_Const::create(angle));
-//			}else{
-//				get_canvas_interface()->get_ui_interface()->error(_("Can't make it the parent to the current active bone"));
-//			}
+					if(active_bone && item_index >= 0 && !list_node->list.empty()){
+						// if active bone is already set
+						ValueNode_Bone::Handle bone_node = ValueNode_Bone::Handle::cast_dynamic(active_bone);
+						if (deform_layer) {
+							if (ValueNode_Composite::Handle comp = ValueNode_Composite::Handle::cast_dynamic(active_bone)) {
+								value_desc = ValueDesc(comp,comp->get_link_index_from_name("first"),value_desc);
+								bone_node = ValueNode_Bone::Handle::cast_dynamic(comp->get_link("first"));
+							} else if ((comp = ValueNode_Composite::Handle::cast_dynamic(list_node->get_link(item_index)))) {
+								value_desc = ValueDesc(comp, comp->get_link_index_from_name("first"),value_desc);
+							} else {
+								get_canvas_interface()->get_ui_interface()->error(_("Expected a ValueNode_Composite with a BonePair"));
+								assert(0);
+								return Smach::RESULT_ERROR;
+							}
+						}
 
-//		}
-//	}else{
-//		get_canvas_interface()->get_ui_interface()->error(_("Please set an active bone"));
-//	}
+						if (!bone_node)
+						{
+							error("expected a ValueNode_Bone");
+							get_canvas_interface()->get_ui_interface()->error(_("Expected a ValueNode_Bone"));
+							assert(0);
+							return Smach::RESULT_ERROR;
+						}
+						ValueDesc v_d = ValueDesc(bone_node,bone_node->get_link_index_from_name("origin"),value_desc);
+						Real sx = bone_node->get_link("scalelx")->operator()(get_canvas()->get_time()).get(Real());
+						Matrix matrix = (*bone_node)(get_canvas()->get_time()).get(Bone()).get_animated_matrix();
+						Real angle = atan2(matrix.axis(0)[1],matrix.axis(0)[0]);
+						matrix = matrix.get_inverted();
+						Point aOrigin = matrix.get_transformed(clickOrigin);
+						aOrigin[0]/=sx;
 
+						Action::Handle createChild(Action::Handle(Action::create("ValueDescCreateChildBone")));
+						createChild->set_param("canvas",layer->get_canvas());
+						createChild->set_param("canvas_interface",get_canvas_interface());
+						createChild->set_param("highlight",true);
+
+						createChild->set_param("value_desc",Action::Param(v_d));
+						createChild->set_param("origin",Action::Param(ValueBase(aOrigin)));
+						createChild->set_param("width",Action::Param(ValueBase(get_bone_width())));
+						createChild->set_param("tipwidth",Action::Param(ValueBase(get_bone_width())));
+						createChild->set_param("prev_active_bone_node",Action::Param(get_work_area()->get_active_bone_value_node()));
+						if((clickOrigin-releaseOrigin).mag()>=0.01) {
+							Real a = atan2((releaseOrigin-clickOrigin)[1],(releaseOrigin-clickOrigin)[0]);
+							createChild->set_param("angle",Action::Param(ValueBase(Angle::rad(a-angle))));
+							createChild->set_param("scalelx", Action::Param(ValueBase((releaseOrigin - clickOrigin).mag())));
+						}else{
+							Real a = default_angle;
+							createChild->set_param("angle",Action::Param(ValueBase(Angle::rad(a-angle))));
+							createChild->set_param("scalelx", Action::Param(ValueBase(1.0)));
+
+						}
+
+						if(createChild->is_ready()){
+							try{
+								get_canvas_interface()->get_instance()->perform_action(createChild);
+							} catch (...) {
+								info("Error performing action");
+							}
+						}
+
+
+					duplicate_bones[current_bone_vn] = new_bone_node;
+					std::cout << "Bone Duped" << std::endl;
+					//selected_bone_descs.erase(it);		//Erase the bone from the list so that its children can go next
+				}
+			}else{
+				std::cout << "Bummer dude" << std::endl;
+			}
+		}
+	}
 }
 
 void
@@ -358,4 +296,46 @@ Action::ValueDescBoneDuplicate::undo() {
 //	}else{
 //		get_canvas_interface()->get_ui_interface()->error(_("Couldn't find parent to active bone"));
 //	}
+}
+
+bool
+Action::ValueDescBoneDuplicate::list_contains(ValueDesc vd) {
+	for(auto it=selected_bone_descs.begin();it!=selected_bone_descs.end();++it)
+	{
+		const ValueDesc& current_value_desc(*it);
+		if(vd == current_value_desc)
+			return true;
+	}
+	return false;
+}
+
+bool
+Action::ValueDescBoneDuplicate::list_contains_value_node(ValueNode_Bone::Handle vn) {
+	for(auto it=selected_bone_descs.begin();it!=selected_bone_descs.end();++it)
+	{
+		const ValueDesc& current_value_desc(*it);
+
+		if(vn == ValueNode_Bone::Handle::cast_dynamic(current_value_desc.get_value_node()))
+			return true;
+	}
+	return false;
+}
+
+void
+Action::ValueDescBoneDuplicate::set_active_bone(ValueNode::Handle bone_value_node){
+	if (active_bone == bone_value_node)
+		return;
+	Action::Handle setActiveBone(Action::Handle(Action::create("ValueNodeSetActiveBone")));
+	setActiveBone->set_param("canvas", get_canvas());
+	setActiveBone->set_param("canvas_interface", get_canvas_interface());
+	setActiveBone->set_param("prev_active_bone_node", get_work_area()->get_active_bone_value_node());
+	setActiveBone->set_param("active_bone_node", bone_value_node);
+
+	if(setActiveBone->is_ready()){
+		try{
+			get_canvas_interface()->get_instance()->perform_action(setActiveBone);
+		} catch (...) {
+			get_canvas_interface()->get_ui_interface()->error(_("Error setting the new active bone"));
+		}
+	}
 }
